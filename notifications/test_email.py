@@ -26,12 +26,12 @@ def test_email(settings: Settings, live: bool=False, confirm_real_send: bool=Fal
     now=datetime.now(timezone.utc).isoformat()
     html=("<h2>SIH monitor email configuration test</h2>"
           f"<p>Generated at {now}</p><p>This is a test message. It contains no SIH result data.</p>"
-          f"<p>Configured sender: {settings.sender_email}</p><p>Configured recipients: {len(recipients)}</p>")
+          f"<p>Sender configured: yes</p><p>Configured recipients: {len(recipients)}</p>")
     outcome=service.notify("SIH_EMAIL_TEST","test",stable_hash([now,recipients]),"[SIH Monitor] Email configuration test",html,"local://email-test")
     previews=[]
     if isinstance(provider,MockEmailProvider):
         for message in provider.messages:
-            previews.append({"from":str(message["From"]),"to":str(message["To"]),"bcc":str(message["Bcc"]),"subject":str(message["Subject"]),"type":str(message["X-SIH-Notification-Type"]),"body":message.get_body(preferencelist=("html",)).get_content()})
+            previews.append({"from":"[configured sender]","to":"[configured sender]","bcc":"[recipient redacted]","subject":str(message["Subject"]),"type":str(message["X-SIH-Notification-Type"]),"body":message.get_body(preferencelist=("html",)).get_content()})
     return {"mode":"live" if live else "mock preview","outcome":outcome,"messages":previews}
 
 def main() -> None:
@@ -44,3 +44,4 @@ def main() -> None:
     print(json.dumps(result,indent=2,ensure_ascii=False))
 
 if __name__=="__main__": main()
+

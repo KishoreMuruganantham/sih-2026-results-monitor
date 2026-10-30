@@ -59,7 +59,7 @@ class NotificationService:
     def notify(self,batch_id: str,notification_type: str,content_hash: str,subject: str,html: str,source_url: str="") -> dict[str,Any]:
         """Compatibility entry point: persist once, then process the durable outbox item."""
         try: recipients=load_recipients(self.settings.recipients_file)
-        except Exception as exc: recipients=[]; self.database.event("recipient_config_error",str(exc),level="ERROR")
+        except Exception: recipients=[]; self.database.event("recipient_config_error","Recipient configuration could not be loaded",level="ERROR")
         self.database.enqueue_notification(batch_id,notification_type,content_hash,subject,html,source_url,recipients)
         with self.database.connect() as db:
             row=db.execute("SELECT id FROM notifications WHERE batch_id=? AND notification_type=? AND content_hash=?",(batch_id,notification_type,content_hash)).fetchone()
@@ -81,7 +81,7 @@ class NotificationService:
         try: recipients=json.loads(row["recipients_json"] or "[]")
         except Exception: recipients=[]
         try: recipients.extend(load_recipients(self.settings.recipients_file))
-        except Exception as exc: self.database.event("recipient_config_error",str(exc),level="ERROR")
+        except Exception: self.database.event("recipient_config_error","Recipient configuration could not be loaded",level="ERROR")
         recipients=list(dict.fromkeys(x.casefold() if isinstance(x,str) else str(x) for x in recipients))
         if not valid_address(self.settings.sender_email):
             self.database.finish_notification(nid,"FAILED","Invalid configured sender address")
@@ -90,8 +90,8 @@ class NotificationService:
         for address in recipients:
             if not isinstance(address,str) or not valid_address(address):
                 bad=str(address); self.database.set_recipient_status(nid,bad,"INVALID","Invalid email address")
-                self.database.event("recipient_invalid",f"Invalid recipient: {bad}",level="WARNING")
-                outcomes.append({"recipient":bad,"status":"INVALID"}); continue
+                self.database.event("recipient_invalid","Invalid recipient address omitted from log",level="WARNING")
+                outcomes.append({"status":"INVALID"}); continue
             with self.database.connect() as db: existing=db.execute("SELECT status FROM notification_recipients WHERE notification_id=? AND recipient_email=?",(nid,address)).fetchone()
             if existing and existing[0] in {"MOCKED","SENT","INVALID"}: continue
             self.database.mark_recipient_processing(nid,address)
@@ -101,12 +101,12 @@ class NotificationService:
                 if result.accepted:
                     status="MOCKED" if self.provider.is_mock else "SENT"
                     error=result.detail if self.provider.is_mock else None
-                else: status="FAILED"; error=result.detail
+                else: status="FAILED"; error="Provider rejected delivery; details redacted"
                 self.database.set_recipient_status(nid,address,status,error,result.message_id)
-                outcomes.append({"recipient":address,"status":status,"detail":error})
-            except Exception as exc:
-                self.database.set_recipient_status(nid,address,"FAILED",str(exc))
-                outcomes.append({"recipient":address,"status":"FAILED","detail":str(exc)})
+                outcomes.append({"status":status})
+            except Exception:
+                self.database.set_recipient_status(nid,address,"FAILED","Delivery attempt failed; provider details redacted")
+                outcomes.append({"status":"FAILED"})
         statuses=self.database.recipient_statuses(nid)
         any_delivered=any(x["status"] in {"MOCKED","SENT"} for x in statuses)
         complete=bool(statuses) and all(x["status"] in {"MOCKED","SENT","INVALID"} for x in statuses)
@@ -157,3 +157,4 @@ def render_revision_email(batch_label: str,revision: dict[str,Any],revision_at_i
     current=render_batch_email(batch_label,revision_at_ist,source_url,svce_records or [],reviews)
     current=current.replace("Detected (IST):", "Updated (IST):")
     return current+f"<h3>Meaningful changes in this update</h3>{body}"
+
