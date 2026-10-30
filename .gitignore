@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.env
+*.sqlite
+*.sqlite3
+*.db
+data/
+secrets/
+recipients.yaml
+*token*.json
+*credentials*.json

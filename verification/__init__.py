@@ -1,0 +1,1 @@
+"""Deterministic result-page verification."""

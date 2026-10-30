@@ -1,0 +1,1 @@
+"""Persistent snapshot storage adapters."""

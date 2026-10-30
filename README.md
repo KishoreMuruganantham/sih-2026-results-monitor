@@ -1,0 +1,3 @@
+# SIH Results Monitor (deployment copy)
+
+Sanitized deployment bundle generated from the private development workspace. It excludes recipient addresses, OAuth files, SQLite data, historical result fixtures, test data, and development notes. Do not publish or activate this copy until it has been reviewed and its `sih-monitor` GitHub Environment restricts deployments to the trusted default branch. Put `DRIVE_OAUTH_TOKEN_JSON`, `DRIVE_FOLDER_ID`, `SIH_SENDER_EMAIL`, `SIH_RECIPIENTS_YAML`, and (after Gmail OAuth approval) `GMAIL_OAUTH_TOKEN_JSON` in Environment Secrets only. Keep `SIH_DRIVE_SYNC_ENABLED` false until explicitly approved. The workflow keeps `DRY_RUN=true` by default; live mail remains behind a separate explicit variable and requires an approved Gmail test.

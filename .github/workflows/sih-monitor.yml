@@ -1,0 +1,61 @@
+name: SIH 2026 result monitor
+
+on:
+  schedule:
+    # Offset from the top of the hour to reduce scheduler contention.
+    - cron: '7,22,37,52 * * * *'
+  workflow_dispatch:
+    inputs:
+      enable_drive_sync:
+        description: 'Run Drive synchronization (requires explicit owner approval and configured secrets)'
+        type: boolean
+        required: true
+        default: false
+
+permissions:
+  contents: read
+
+# GitHub permits one active run and, by default, one pending run in a group.
+# A newer pending tick may replace an older pending tick; later polling catches up.
+concurrency:
+  group: sih-monitor-google-drive-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    # This repository variable is intentionally false until the owner explicitly
+    # enables real Drive access. Manual dispatch can opt in for one approved run.
+    if: vars.SIH_DRIVE_SYNC_ENABLED == 'true' || inputs.enable_drive_sync == true || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: sih-monitor
+    timeout-minutes: 12
+    env:
+      DRY_RUN: 'true'
+      EMAIL_TRANSPORT: mock
+      ENABLE_REAL_EMAIL: 'false'
+      SIH_DATABASE_PATH: data/sih_monitor.sqlite3
+      SIH_SNAPSHOTS_DIR: data/snapshots
+      SIH_RECIPIENTS_FILE: recipients.yaml
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Run local syntax check (manual dispatch without Drive sync)
+        if: github.event_name == 'workflow_dispatch' && inputs.enable_drive_sync != true && vars.SIH_DRIVE_SYNC_ENABLED != 'true'
+        run: python -m compileall -q .
+      - name: Run one monitoring and synchronization cycle
+        if: vars.SIH_DRIVE_SYNC_ENABLED == 'true' || inputs.enable_drive_sync == true
+        env:
+          DRY_RUN: 'true'
+          EMAIL_TRANSPORT: mock
+          ENABLE_REAL_EMAIL: 'false'
+          DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
+          DRIVE_OAUTH_TOKEN_JSON: ${{ secrets.DRIVE_OAUTH_TOKEN_JSON }}
+          GMAIL_OAUTH_TOKEN_JSON: ''
+          SIH_SENDER_EMAIL: ${{ secrets.SIH_SENDER_EMAIL }}
+          SIH_RECIPIENTS_YAML: ${{ secrets.SIH_RECIPIENTS_YAML }}
+        run: python -m run_monitor
